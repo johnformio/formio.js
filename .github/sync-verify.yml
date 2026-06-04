@@ -1,6 +1,7 @@
 # Drift-suppression config for the OSS-side verify-sync workflow.
 #
-# Place this file at `.github/sync-verify.yml` in each OSS mirror.
+# Place at `.github/sync-verify.yml` in each OSS mirror.
+#
 # Patterns are matched against repo-relative paths (the package root).
 # Suffix syntax:
 #   foo          → exact path `foo` OR anything under `foo/`
@@ -8,28 +9,27 @@
 #   foo/*        → same (treated as a recursive prefix; intentionally loose)
 #   foo/**       → same
 # Inner globs (`*` mid-segment) are intentionally NOT supported — keep
-# patterns shaped like paths or directory prefixes. If a pattern matches,
-# the file becomes invisible to the drift check on BOTH sides.
+# patterns shaped like paths or directory prefixes.
 #
-# Two reasons to add a path here:
-#   1. OSS-owned content nirvana doesn't sync (your own CI workflows, repo
-#      community files, sponsor configs, etc.) — suppresses oss-only drift.
-#   2. Files that nirvana intentionally drops from the sync but tracks in
-#      monorepo history — suppresses mono-only drift.
+# Always-excluded paths (you don't need to list them here; they're
+# hardcoded in verify-oss-sync.mjs):
+#   - `.github/workflows/` — CI configs always diverge per repo
+#   - `.github/sync-verify.yml` — this file itself
+#
+# Add a path here when:
+#   1. OSS owns a file nirvana doesn't sync (custom community files,
+#      sponsor configs, badges, etc.) — suppresses `oss-only` drift.
+#   2. Nirvana intentionally omits a file that's also in monorepo history —
+#      suppresses `mono-only` drift.
 
 exclude:
-  # Each OSS mirror has its own CI separate from nirvana's workflows.
-  - .github/workflows
-  # This config file itself — it lives in OSS, sync-oss preserves it across
-  # the wipe-and-replace, and it's not part of the package's release content.
-  - .github/sync-verify.yml
-  # GitHub community files — usually OSS-maintained, not synced.
+  # GitHub community / metadata files — usually OSS-owned, not synced.
   - .github/ISSUE_TEMPLATE
   - .github/PULL_REQUEST_TEMPLATE.md
   - .github/CODE_OF_CONDUCT.md
   - .github/CONTRIBUTING.md
   - .github/SECURITY.md
   - .github/FUNDING.yml
-  # Test coverage artifacts often committed to OSS but never to nirvana.
+  # Test coverage artifacts sometimes committed to OSS but never to nirvana.
   - .nyc_output
   - coverage
