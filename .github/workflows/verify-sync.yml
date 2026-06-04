@@ -190,15 +190,16 @@ jobs:
         run: |
           set -euo pipefail
           PR_NUMBER=${{ github.event.pull_request.number }}
-          EXISTING=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+          REPO="${{ github.repository }}"
+          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
             --jq 'map(select(.body | startswith("<!-- formio-sync-verify -->"))) | .[0].id // empty')
+          PAYLOAD=$(jq -n --rawfile body "$GITHUB_WORKSPACE/comment.md" '{body: $body}')
           if [ -n "$EXISTING" ]; then
             echo "Updating existing comment $EXISTING"
-            jq -n --rawfile body "$GITHUB_WORKSPACE/comment.md" '{body: $body}' \
-              | gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" --input -
+            printf '%s' "$PAYLOAD" | gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" --input -
           else
             echo "Creating new comment"
-            gh pr comment "$PR_NUMBER" --body-file "$GITHUB_WORKSPACE/comment.md"
+            printf '%s' "$PAYLOAD" | gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" --input -
           fi
 
       - name: Fail on critical drift
