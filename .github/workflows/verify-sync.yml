@@ -1,4 +1,4 @@
-name: Verify sync from nirvana
+name: verify-sync
 
 # Drop into any OSS repo at `.github/workflows/verify-sync.yml`. Pair with
 # a per-repo `.github/sync-verify.yml` exclude config (see
@@ -19,7 +19,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  verify-sync:
+  compare:
     if: github.event.pull_request.body != null && contains(github.event.pull_request.body, '<!-- formio-sync-meta ')
     runs-on: ubuntu-latest
     steps:
@@ -144,6 +144,12 @@ jobs:
           echo "critical=$CRIT" >> "$GITHUB_OUTPUT"
           echo "info=$INFO"     >> "$GITHUB_OUTPUT"
 
+          # Cap per-section list size so the comment can't exceed GitHub's
+          # 65k-char limit. The full machine-readable list is in verify.json,
+          # uploaded as a workflow artifact for anyone needing the whole set.
+          MAX_PER_SECTION=200
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
           {
             echo "<!-- formio-sync-verify -->"
             echo "## Sync verify: \`$PKG@$VERSION\`"
@@ -164,23 +170,35 @@ jobs:
             if [ "$CRIT" != "0" ]; then
               echo "### Critical — OSS contains changes not in nirvana"
               echo ""
-              jq -r '.issues[] | select(.severity == "critical") |
+              jq -r --argjson max $MAX_PER_SECTION '
+                [.issues[] | select(.severity == "critical")][:$max][] |
                 if   .kind == "oss-only"             then "- :heavy_plus_sign: `" + .file + "` — extra file in OSS"
                 elif .kind == "content-diff"         then "- :pencil2: `" + .file + "` — content differs from nirvana"
                 elif .kind == "dep-extra-in-oss"     then "- :package: [`" + .section + "`] `" + .key + "` = `" + (.oss|tostring) + "` — dep only in OSS"
                 elif .kind == "dep-version-mismatch" then "- :package: [`" + .section + "`] `" + .key + "` — nirvana=`" + (.mono|tostring) + "`, OSS=`" + (.oss|tostring) + "`"
                 elif .kind == "workspace-orphan"     then "- :warning: [`" + .section + "`] `" + .key + "` — workspace ref `" + (.mono|tostring) + "` has no sibling in nirvana"
                 else "- " + tostring end' "$GITHUB_WORKSPACE/pkg.json"
+              if [ "$CRIT" -gt "$MAX_PER_SECTION" ]; then
+                REMAINING=$((CRIT - MAX_PER_SECTION))
+                echo ""
+                echo "_… and $REMAINING more critical entries truncated. Full list in the [workflow run]($RUN_URL) artifact \`verify.json\`._"
+              fi
               echo ""
             fi
 
             if [ "$INFO" != "0" ]; then
               echo "<details><summary>Informational ($INFO entries — nirvana has content the PR doesn't)</summary>"
               echo ""
-              jq -r '.issues[] | select(.severity == "info") |
+              jq -r --argjson max $MAX_PER_SECTION '
+                [.issues[] | select(.severity == "info")][:$max][] |
                 if   .kind == "mono-only"          then "- :grey_question: `" + .file + "` — missing in OSS"
                 elif .kind == "dep-missing-in-oss" then "- :package: [`" + .section + "`] `" + .key + "` = `" + (.mono|tostring) + "` — dep only in nirvana"
                 else "- " + tostring end' "$GITHUB_WORKSPACE/pkg.json"
+              if [ "$INFO" -gt "$MAX_PER_SECTION" ]; then
+                REMAINING=$((INFO - MAX_PER_SECTION))
+                echo ""
+                echo "_… and $REMAINING more informational entries truncated._"
+              fi
               echo ""
               echo "</details>"
               echo ""
@@ -194,6 +212,17 @@ jobs:
           else
             echo "exit=0" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Upload verify.json artifact
+        # Always upload so the full machine-readable drift list is accessible
+        # even when the PR comment is truncated.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-result
+          path: ${{ github.workspace }}/verify.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Post sticky comment
         env:
