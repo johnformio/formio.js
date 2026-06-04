@@ -66,9 +66,20 @@ jobs:
           path: nirvana
           fetch-depth: 1
 
+      - name: Checkout gh-workflows (verify tool)
+        # Pinned to `per-release-oss-sync` while the verify tooling lands;
+        # switch to `main` after merge.
+        uses: actions/checkout@v4
+        with:
+          repository: formio/gh-workflows
+          ref: per-release-oss-sync
+          token: ${{ secrets.NIRVANA_READ_TOKEN }}
+          path: gh-workflows
+          fetch-depth: 1
+
       - name: Install pnpm
-        # verify-oss-sync.mjs calls `pnpm ls -r` via workspace.mjs to build
-        # the sibling version map for workspace:* resolution.
+        # verify-oss-sync.mjs calls `pnpm ls -r` to build the sibling version
+        # map for workspace:* resolution.
         uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -87,8 +98,8 @@ jobs:
           else
             echo "No .github/sync-verify.yml in PR head — comparing without OSS-side excludes."
           fi
-          cd "$GITHUB_WORKSPACE/nirvana"
-          npx --yes zx@8 .github/scripts/verify-oss-sync.mjs \
+          node "$GITHUB_WORKSPACE/gh-workflows/bin/verify-oss-sync.mjs" \
+            --monorepo="$GITHUB_WORKSPACE/nirvana" \
             --filter="${{ steps.meta.outputs.package }}" \
             --oss-path="$GITHUB_WORKSPACE/pr-head" \
             --json \
