@@ -1770,3 +1770,4 @@ export default class Webform extends NestedDataComponent {
 Webform.setBaseUrl = Formio.setBaseUrl;
 Webform.setApiUrl = Formio.setApiUrl;
 Webform.setAppUrl = Formio.setAppUrl;
+// verify-sync e2e test 1780591682
